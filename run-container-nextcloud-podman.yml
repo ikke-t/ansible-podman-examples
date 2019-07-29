@@ -9,7 +9,7 @@
     nextcloud_nfs_mountpoint: /mnt/nextcloud_data
     nextcloud_www_dir: nextcloud_www
     nextcloud_www_dir_owner: 33
-    nextcloud_www_dir_group: ikke
+    nextcloud_www_dir_group: 33
     container_run_args: >-
       --rm
       -p 8090:80/tcp
