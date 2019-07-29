@@ -1,0 +1,38 @@
+---
+
+- name: ensure nodered container is running
+  hosts: all
+  vars:
+    container_state: running
+    container_name: nodered
+    container_image: nodered/node-red-docker
+    container_dir_config: node-red
+    container_dir_owner: 1001
+    container_dir_group: root
+    container_run_args: >-
+      --rm
+      -p 1880:1880/tcp
+      -v "{{exported_container_volumes_basedir}}/{{ container_dir_config }}:/data:Z"
+      --hostname="nodered.{{ my_domain }}"
+      --memory=512M
+      -e FLOWS="flows_nodered.{{ my_domain }}.json"
+    container_firewall_ports:
+      - 1880/tcp
+
+  tasks:
+
+  - name: ensure container files mount point on host
+    tags: mount
+    file:
+      path: "{{exported_container_volumes_basedir}}/{{ item }}"
+      owner: "{{ container_dir_owner }}"
+      group: "{{ container_dir_group }}"
+      state: directory
+      recurse: yes
+    with_items:
+      - "{{ container_dir_config }}"
+
+  - name: ensure container state
+    tags: container
+    import_role:
+      name: podman_container_systemd
