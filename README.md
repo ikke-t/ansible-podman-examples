@@ -15,3 +15,7 @@ List of containers:
 * [OpenHAB](https://raw.githubusercontent.com/ikke-t/ansible-podman-examples/master/run-container-openhab-podman.yml)
 * [Pi-Hole](https://raw.githubusercontent.com/ikke-t/ansible-podman-examples/master/run-container-pihole-podman.yml)
 * [Unifi Controller](https://raw.githubusercontent.com/ikke-t/ansible-podman-examples/master/run-container-unifi-controller-podman.yml)
+
+I run these with this command (I recommend Ansible Tower or AWX):
+
+```ansible-playbook -b -i my-container-host-fqdn, run-container-pihole-podman.yml```
