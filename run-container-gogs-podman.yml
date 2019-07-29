@@ -1,0 +1,94 @@
+---
+
+- name: ensure gogs container is running
+  hosts: all
+  vars:
+    container_state: running
+    container_name: gogs
+    container_image: gogs/gogs
+    container_dir_data: /home/git/gogs
+    container_dir_owner: 9001
+    container_dir_group: 9001
+    container_run_args: >-
+      --rm
+      -p 10022:22/tcp
+      -p 10080:3000/tcp
+      -v "/home/git/gogs:/data"
+      --hostname="gogs.{{ my_domain }}"
+      --memory=128M
+      -e PUID=2100
+      -e PGID=2100
+      --privileged=true
+    container_firewall_ports:
+      - 10080/tcp
+
+  tasks:
+
+# For gogs, see:
+# https://github.com/gogs/gogs/tree/master/docker
+# http://www.ateijelo.com/blog/2016/07/09/share-port-22-between-docker-gogs-ssh-and-local-system
+
+  - name: ensure gogs ssh gludge directory
+    tags: gogs
+    file:
+      path: /app/gogs/
+      state: directory
+
+  - name: ensure gogs ssh gludge file
+    tags: gogs
+    copy:
+      dest: /app/gogs/gogs
+      mode: 0755
+      content: |
+        #!/bin/bash
+        ssh -p 10022 -o StrictHostKeyChecking=no git@127.0.0.1 \
+        SSH_ORIGINAL_COMMAND=$(printf '%q' "$SSH_ORIGINAL_COMMAND") "$0" "$@"
+
+  - name: Ensure group git exists
+    tags: gogs
+    group:
+      name: git
+      state: present
+      gid: 2100
+
+  - name: Add the git user for gogs on host
+    tags: gogs
+    user:
+      name: git
+      comment: Gogs git ssh user
+      uid: 2100
+      group: git
+      home: /home/git
+      create_home: no
+
+  - name: ensure gogs directory
+    tags: gogs
+    file:
+      path: "/home/git/gogs"
+      state: directory
+      owner: git
+      recurse: yes
+
+  - name: ensure git ssh directory link
+    tags: gogs
+    file:
+      path: /home/git/.ssh
+      src: gogs/git/.ssh
+      state: link
+      owner: git
+      group: git
+
+  - name: ensure container files mount point on host
+    tags: mount
+    file:
+      path: "{{ item }}"
+      owner: "{{ container_dir_owner }}"
+      group: "{{ container_dir_group }}"
+      state: directory
+      recurse: yes
+    with_items: "{{container_dir_data}}"
+
+  - name: ensure container state
+    tags: container
+    import_role:
+      name: podman_container_systemd
