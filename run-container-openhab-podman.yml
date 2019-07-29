@@ -1,0 +1,48 @@
+---
+
+- name: ensure openhab container is running
+  hosts: all
+  vars:
+    container_state: running
+    container_name: openhab
+    container_image: openhab/openhab:2.3.0-amd64-alpine
+    container_dir_config: openhab_conf
+    container_dir_data: openhab_userdata
+    container_dir_addons: openhab_addons
+    container_dir_owner: 9001
+    container_dir_group: 9001
+    container_run_args: >-
+      --rm
+      -p 8083:8080/tcp
+      -p 8101:8101/tcp
+      -p 5007:5007/tcp
+      -v "{{exported_container_volumes_basedir}}/{{container_dir_addons}}:/openhab/addons:Z"
+      -v "{{exported_container_volumes_basedir}}/{{container_dir_config}}:/openhab/conf:Z"
+      -v "{{exported_container_volumes_basedir}}/{{container_dir_data}}:/openhab/userdata:Z"
+      --hostname="openhab.{{ my_domain }}"
+      --memory=512M
+      -e EXTRA_JAVA_OPTS="-Duser.timezone={{ my_timezone }}"
+    firewall_port_list:
+      - 8083/tcp
+      - 8101/tcp
+      - 5007/tcp
+
+  tasks:
+
+  - name: ensure container files mount point on host
+    tags: mount
+    file:
+      path: "{{exported_container_volumes_basedir}}/{{ item }}"
+      owner: "{{ container_dir_owner }}"
+      group: "{{ container_dir_group }}"
+      state: directory
+      recurse: yes
+    with_items:
+      - "{{container_dir_addons}}"
+      - "{{container_dir_config}}"
+      - "{{container_dir_data}}"
+
+  - name: ensure container state
+    tags: container
+    import_role:
+      name: podman_container_systemd

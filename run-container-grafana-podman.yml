@@ -1,0 +1,42 @@
+---
+
+- name: ensure grafana container is running
+  hosts: all
+  vars:
+    container_state: running
+    container_name: grafana
+    container_image: grafana/grafana
+    container_dir_lib: grafana-lib
+    container_dir_etc: grafana-etc
+    container_dir_owner: 472
+    container_dir_group: root
+    container_memory: 128M
+    container_fqdn: "grafana.{{ my_domain }}"
+    container_run_args: >-
+      --rm
+      -p 3000:3000/tcp
+      -v "{{exported_container_volumes_basedir}}/{{ container_dir_lib }}:/var/lib/grafana:Z"
+      -v "{{exported_container_volumes_basedir}}/{{ container_dir_etc }}:/etc/grafana:Z"
+      --hostname="{{ container_fqdn }}"
+      --memory="{{ container_memory }}"
+    container_firewall_ports:
+      - 3000/tcp
+
+  tasks:
+
+  - name: ensure container files mount point on host
+    tags: mount
+    file:
+      path: "{{exported_container_volumes_basedir}}/{{ item }}"
+      owner: "{{ container_dir_owner }}"
+      group: "{{ container_dir_group }}"
+      state: directory
+      recurse: yes
+    with_items:
+      - "{{ container_dir_lib }}"
+      - "{{ container_dir_etc }}"
+
+  - name: ensure container state
+    tags: container
+    import_role:
+      name: podman_container_systemd

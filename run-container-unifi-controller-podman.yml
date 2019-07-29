@@ -1,0 +1,75 @@
+---
+# I run this file with following line to test against my Vagrant Fedora:
+# ansible-playbook --vault-password-file .vault-password -b -i \
+# ~/vagrant/fedora/.vagrant/provisioners/ansible/inventory/vagrant_ansible_inventory \
+# -e ansible_python_interpreter=/usr/bin/python3 -e state=running test-podman.yml
+
+- name: ensure unifi container is running
+  hosts: all
+  vars:
+    container_name: unifi
+    container_image: jacobalberty/unifi:latest
+    #container_run_as_user: unifi
+    unifi_uid: 975
+    unifi_gid: 972
+    container_run_args: >-
+      --rm
+      -p 8080:8080 -p 8443:8443 -p 3478:3478/udp -p 10001:10001/udp
+      -v "{{exported_container_volumes_basedir}}/unifi:/unifi:Z"
+      --hostname="unifi.{{ my_domain }}"
+      --memory=2048M
+      -e TZ="{{ my_timezone }}"
+      -e UNIFI_UID="{{unifi_uid}}"
+      -e UNIFI_GID="{{unifi_gid}}"
+    container_firewall_ports:
+      - 8080/tcp
+      - 8443/tcp
+      - 3478/udp
+      - 10001/udp
+
+  tasks:
+
+  - name: set variable states when container state is running
+    set_fact:
+      user_state: present
+    when: unifi_state == "running"
+
+  - name: set varialbe states when container state is not running
+    set_fact:
+      user_state: absent
+    when: unifi_state != "running"
+
+  - name: ensure unifi group
+    group:
+      name: unifi
+      gid: "{{unifi_gid}}"
+      state: "{{ user_state }}"
+    when: unifi_state == "running"
+
+  - name: ensure unifi user
+    user:
+      name: unifi
+      comment: User to run unifi control software
+      uid: "{{unifi_uid}}"
+      group: unifi
+      shell: /sbin/nologin
+      state: "{{ user_state }}"
+
+  - name: ensure unifi group
+    group:
+      name: unifi
+      gid: "{{unifi_gid}}"
+      state: "{{ user_state }}"
+    when: unifi_state != "running"
+
+  - name: ensure unifi config dir
+    tags: unifi
+    file:
+      path: "{{exported_container_volumes_basedir}}/unifi"
+      state: directory
+      owner: "{{ unifi_uid }}"
+      group: "{{ unifi_gid }}"
+
+  - name: ensure container state
+    import_role:
+      name: podman_container_systemd

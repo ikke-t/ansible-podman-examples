@@ -1,0 +1,3 @@
+exported_container_volumes_basedir: /var/lib/containers/exported_volumes
+my_domain: localdomain
+my_timezone: "Europe/Helsinki"
