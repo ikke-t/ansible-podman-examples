@@ -1,0 +1,77 @@
+---
+
+- name: ensure nextcloud container is running
+  hosts: all
+  vars:
+    nextcloud_state: running
+    container_name: nextcloud
+    container_image: nextcloud:latest
+    nextcloud_nfs_mountpoint: /mnt/nextcloud_data
+    nextcloud_www_dir: nextcloud_www
+    nextcloud_www_dir_owner: 33
+    nextcloud_www_dir_group: ikke
+    container_run_args: >-
+      --rm
+      -p 8090:80/tcp
+      -v "{{exported_container_volumes_basedir}}/{{nextcloud_www_dir}}:/var/www/html:Z"
+      -v "{{ nextcloud_nfs_mountpoint }}/data:/var/www/html/data"
+      --hostname="{{ nextcloud_fqdn }}"
+      --memory=1024M
+    container_firewall_ports:
+      - 8090/tcp
+
+  tasks:
+
+  - name: set variable states when container state is running
+    set_fact:
+      cron_state: present
+    when: nextcloud_state == "running"
+
+  - name: set varialbe states when container state is not running
+    set_fact:
+      cron_state: absent
+    when: nextcloud_state != "running"
+
+  - name: Ensure container data mount points
+    tags: mount
+    file:
+      path: "{{ nextcloud_nfs_mountpoint }}"
+      state: directory
+
+  - name: ensure container NFS mounts from NAS
+    tags: [ mount, nfs ]
+    mount:
+      src: "{{ nextcloud_nfs_src }}"
+      path: "{{ nextcloud_nfs_mountpoint }}"
+      fstype: nfs
+      opts: rw,rsize=8192,wsize=8192,timeo=14,intr,vers=3
+      state: mounted
+
+  - name: ensure nextcloud www files mount point on host
+    tags: mount
+    file:
+      path: "{{exported_container_volumes_basedir}}/{{nextcloud_www_dir}}"
+      owner: "{{ nextcloud_www_dir_owner }}"
+      group: "{{ nextcloud_www_dir_group }}"
+      state: directory
+
+  - name: ensure container state
+    tags: container
+    import_role:
+      name: podman_container_systemd
+
+  - name: ensure cron is available
+    package:
+      name:
+        - cronie
+        - crontabs
+      state: present
+    when: cron_state == "present"
+
+  - name: ensure nextcloud cron get's run every 15 mins.
+    tags: cron
+    cron:
+      name: "nextcloud periodic job"
+      minute: "*/15"
+      job: podman exec -u www-data nextcloud /usr/local/bin/php -f /var/www/html/cron.php
+      state: "{{ cron_state }}"
