@@ -1,0 +1,36 @@
+---
+
+- name: ensure homeassistant container is running
+  hosts: all
+  vars:
+    container_run_as_user: redhatter
+    container_run_as_user: redhatter
+    systemd_TimeoutStartSec: 90
+    container_name: ha
+    container_image: homeassistant/home-assistant:stable
+    exported_container_volumes_basedir: /var/lib/containers/storage
+    ha_config_dir: homeassistant-config
+    ha_config_dir_owner: "{{ container_run_as_user }}"
+    ha_config_dir_group: "{{ container_run_as_user }}"
+    container_run_args: >-
+      --rm
+      -p 8123:8123/tcp
+      -v "{{ exported_container_volumes_basedir }}/{{ ha_config_dir }}:/config:Z"
+      --hostname="ha.localnet"
+    container_firewall_ports:
+      - '8123/tcp'
+
+  tasks:
+
+  - name: ensure ha config directory exists on host
+    file:
+      path: "{{ exported_container_volumes_basedir }}/{{ ha_config_dir }}"
+      owner: "{{ ha_config_dir_owner }}"
+      group: "{{ ha_config_dir_group }}"
+      state: directory
+
+  - name: ensure container state
+    tags: container
+    import_role:
+      name: podman_container_systemd
+
