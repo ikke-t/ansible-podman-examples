@@ -8,7 +8,7 @@
     systemd_TimeoutStartSec: 90
     container_name: ha
     container_image: homeassistant/home-assistant:stable
-    exported_container_volumes_basedir: /var/lib/containers/storage
+    exported_container_volumes_basedir: /var/lib
     ha_config_dir: homeassistant-config
     ha_config_dir_owner: "{{ container_run_as_user }}"
     ha_config_dir_group: "{{ container_run_as_user }}"
