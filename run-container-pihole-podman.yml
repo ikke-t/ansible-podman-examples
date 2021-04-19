@@ -1,28 +1,35 @@
 ---
+# yamllint disable rule:line-length
 # https://github.com/pi-hole/docker-pi-hole
 - name: ensure pihole container is running
   hosts: all
   vars:
     container_state: running
     container_name: pihole
-    container_image: pihole/pihole:latest
+    container_run_as_user: pihole
+    container_run_as_group: pihole
+    container_image_list:
+      - docker.io/pihole/pihole:latest
     container_dir_config: pihole-etc
     container_dir_data: pihole-dnsmasq.d
-    container_dir_owner: 0
-    container_dir_group: 0
+    container_dir_owner: pihole
+    container_dir_group: pihole
     container_run_args: >-
       --rm
-      -p 53:53/tcp
-      -p 53:53/udp
-      -p 67:67/udp
-      -p 80:80/tcp
-      -p 443:443/tcp
+      -p 1153:53/tcp
+      -p 1153:53/udp
+      -p 1167:67/udp
+      -p 1180:80/tcp
+      -p 1443:443/tcp
       -v "{{exported_container_volumes_basedir}}/{{container_dir_config}}:/etc/pihole:Z"
       -v "{{exported_container_volumes_basedir}}/{{container_dir_data}}:/etc/dnsmasq.d:Z"
       --hostname="pihole.{{ my_domain }}"
       --memory=512M
       -e "TZ={{ my_timezone }}"
+      -e INTERFACE=tap0
       --dns 127.0.0.1,192.168.117.1
+      --label "io.containers.autoupdate=image"
+      --network=slirp4netns:port_handler=slirp4netns
     firewall_port_list:
       - 53:53/tcp
       - 53:53/udp
@@ -32,19 +39,79 @@
 
   tasks:
 
-  - name: ensure container files mount point on host
-    tags: mount
-    file:
-      path: "{{exported_container_volumes_basedir}}/{{ item }}"
-      owner: "{{ container_dir_owner }}"
-      group: "{{ container_dir_group }}"
-      state: directory
-      recurse: yes
-    with_items:
-      - "{{container_dir_config}}"
-      - "{{container_dir_data}}"
+    - name: set variable states when container state is running
+      set_fact:
+        state: present
+        firewall_state: enabled
+      when: container_state == "running"
 
-  - name: ensure container state
-    tags: container
-    import_role:
-      name: podman_container_systemd
+    - name: set varialbe states when container state is not running
+      set_fact:
+        state: absent
+        firewall_state: disabled
+      when: container_state != "running"
+
+    - name: ensure user before creating anything
+      user:
+        name: "{{ container_run_as_user }}"
+        comment: I run pihole container
+        state: "{{ state }}"
+      when:
+        - state == "present"
+        - container_run_as_user != 'root'
+      register: user_info
+
+    - name: ensure container files mount point on host
+      tags: mount
+      file:
+        path: "{{exported_container_volumes_basedir}}/{{ item }}"
+        owner: "{{ container_dir_owner }}"
+        group: "{{ container_dir_group }}"
+        state: directory
+        recurse: true
+        follow: false
+      with_items:
+        - "{{container_dir_config}}"
+        - "{{container_dir_data}}"
+
+    - name: ensure container state
+      tags: container
+      import_role:
+        name: ikke_t.podman_container_systemd
+
+    - name: Redirect DNS, DHCP, HTTP and HTTPS to pihole
+      ansible.posix.firewalld:
+        service: "{{ item }}"
+        zone: public
+        permanent: true
+        immediate: true
+        state: "{{ firewall_state }}"
+      loop:
+        - dns
+        - http
+        - https
+        - dhcp
+
+    - name: Redirect DNS, DHCP, HTTP and HTTPS to pihole
+      ansible.posix.firewalld:
+        rich_rule: "{{ item }}"
+        zone: public
+        permanent: true
+        immediate: true
+        state: "{{ firewall_state }}"
+      loop:
+        - rule family=ipv4 forward-port port=53 protocol=tcp to-port=1153
+        - rule family=ipv4 forward-port port=53 protocol=udp to-port=1153
+        - rule family=ipv4 forward-port port=67 protocol=udp to-port=1167
+        - rule family=ipv4 forward-port port=80 protocol=tcp to-port=1180
+        - rule family=ipv4 forward-port port=443 protocol=tcp to-port=1443
+
+
+    - name: delete user after tear down
+      user:
+        name: "{{ container_run_as_user }}"
+        comment: I run pihole container
+        state: "{{ state }}"
+      when:
+        - state == "absent"
+        - container_run_as_user != 'root'
